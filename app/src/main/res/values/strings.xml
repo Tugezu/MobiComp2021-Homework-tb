@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">MobiComp Homework</string>
+    <string name="login">Login</string>
+    <string name="sharedPrefKey">com.example.mobicomphomework.SHARED_PREFERENCE_KEY</string>
+    <string name="create_new_reminder">Create new reminder</string>
+    <string name="log_out">Log out</string>
+    <string name="sign_up">Sign up</string>
+    <string name="welcome">Welcome!</string>
+</resources>
