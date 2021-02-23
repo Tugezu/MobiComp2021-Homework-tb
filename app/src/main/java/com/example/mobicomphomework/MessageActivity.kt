@@ -2,10 +2,18 @@ package com.example.mobicomphomework
 
 import android.content.Context
 import android.content.Intent
+import android.os.AsyncTask
 import android.os.Bundle
+import android.widget.AdapterView
 import android.widget.Button
 import android.widget.ListView
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.room.Room
+import com.example.mobicomphomework.db.AppDatabase
+import com.example.mobicomphomework.db.ReminderMessage
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 class MessageActivity : AppCompatActivity() {
     private lateinit var listView: ListView
@@ -15,7 +23,54 @@ class MessageActivity : AppCompatActivity() {
 
         listView = findViewById<ListView>(R.id.reminderMsgListView)
 
+        listView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
+
+            // retrieve the selected Item
+            val selectedReminder = listView.adapter.getItem(position) as ReminderMessage
+
+            // show an AlertDialog with edit options
+            val builder = AlertDialog.Builder(this@MessageActivity)
+            builder.setTitle("Edit reminder")
+                    .setMessage("Would you like to edit or delete this reminder?")
+                    .setPositiveButton("Edit") { _, _ ->
+
+                        intent = Intent(applicationContext, EditReminderActivity::class.java)
+
+                        // pass the id of the message to edit to the edit activity
+                        intent.putExtra("EDIT_REMINDER_ID", selectedReminder.msgid.toString())
+
+                        // start the reminder edit activity
+                        startActivity(intent)
+
+                        // update the list view
+                        updateListView()
+                    }
+                    .setNegativeButton("Delete") { _, _ ->
+                        // remove the reminder from the database
+                        AsyncTask.execute {
+                            val db = Room
+                                    .databaseBuilder(
+                                            applicationContext,
+                                            AppDatabase::class.java,
+                                            getString(R.string.databaseFilename)
+                                    )
+                                    .build()
+                            db.messageDao().delete(selectedReminder.msgid!!)
+                        }
+
+                        // update the list view
+                        updateListView()
+                    }
+                    .setNeutralButton("Cancel") { dialog, _ -> dialog.dismiss() }
+                    .show()
+
+        }
+
         findViewById<Button>(R.id.btnLogout).setOnClickListener { logOut() }
+
+        findViewById<FloatingActionButton>(R.id.btnNewMessage).setOnClickListener {
+            startActivity(Intent(applicationContext, NewReminderActivity::class.java))
+        }
 
         updateListView()
     }
@@ -37,14 +92,36 @@ class MessageActivity : AppCompatActivity() {
     }
 
     private fun updateListView() {
-        // create placeholder list of reminder messages for listView
-        val listItems = listOf(
-                ReminderMessage(msgid = 1, name = "Event 1", time = "12:00 21.2.2021"),
-                ReminderMessage(msgid = 2, name = "Event 2", time = "13:00 22.2.2021"),
-                ReminderMessage(msgid = 3, name = "Event 3", time = "14:00 4.3.2021"))
+        var refreshTask = LoadReminderMessages()
+        refreshTask.execute()
+    }
 
-        // initialize an adapter for listView and set the content
-        val adapter = MessageAdapter(this, listItems)
-        listView.adapter = adapter
+    inner class LoadReminderMessages : AsyncTask<String?, String?, List<ReminderMessage>>() {
+        override fun doInBackground(vararg params: String?): List<ReminderMessage> {
+            val db = Room.databaseBuilder(
+                applicationContext,
+                AppDatabase::class.java,
+                getString(R.string.databaseFilename)
+            ).build()
+
+            val reminderMessages = db.messageDao().getReminders()
+            db.close()
+
+            return reminderMessages
+        }
+
+        override fun onPostExecute(reminderMessages: List<ReminderMessage>?) {
+            super.onPostExecute(reminderMessages)
+            if (reminderMessages != null) {
+                if (reminderMessages.isNotEmpty()) {
+                    val adapter = MessageAdapter(applicationContext, reminderMessages)
+                    listView.adapter = adapter
+                } else {
+                    listView.adapter = null
+                    Toast.makeText(applicationContext, "No messages to show", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
     }
 }

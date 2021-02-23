@@ -6,4 +6,6 @@
     <string name="log_out">Log out</string>
     <string name="sign_up">Sign up</string>
     <string name="welcome">Welcome!</string>
+    <string name="databaseFilename">com.example.mobicomphomework.dbfile</string>
+    <string name="hello_blank_fragment">Hello blank fragment</string>
 </resources>
