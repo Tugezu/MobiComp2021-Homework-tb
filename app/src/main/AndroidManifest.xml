@@ -9,7 +9,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.MobiCompHomework">
-        <activity android:name=".MessageItem"></activity>
+        <activity android:name=".EditReminderActivity"></activity>
+        <activity android:name=".NewReminderActivity" />
+        <activity android:name=".MessageItem" />
         <activity android:name=".MessageActivity" />
         <activity android:name=".LoginActivity" />
         <activity android:name=".MainActivity">

@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.TextView
+import com.example.mobicomphomework.db.ReminderMessage
 
 class MessageAdapter(context: Context, private val dataSource: List<ReminderMessage>) : BaseAdapter() {
 
@@ -18,8 +19,8 @@ class MessageAdapter(context: Context, private val dataSource: List<ReminderMess
         val eventNameTextView = rowView.findViewById<TextView>(R.id.txtEventName) as TextView
         val eventTimeTextView = rowView.findViewById<TextView>(R.id.txtEventTime) as TextView
 
-        eventNameTextView.text = dataSource[position].name
-        eventTimeTextView.text = dataSource[position].time
+        eventNameTextView.text = dataSource[position].message
+        eventTimeTextView.text = dataSource[position].reminder_time
 
         return rowView
     }
