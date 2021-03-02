@@ -15,22 +15,14 @@ interface MessageDao {
     fun delete(id: Int)
 
     @Query("SELECT * FROM reminderMessages")
-    fun getReminders(): List<ReminderMessage>
+    fun getAllReminders(): List<ReminderMessage>
 
     @Query("SELECT * FROM reminderMessages WHERE msgid = :id")
     fun getReminder(id: Int): ReminderMessage
 
-    @Query("UPDATE reminderMessages SET message = :message, reminder_time = :reminder_time WHERE msgid = :id") // TODO: update location
+    @Query("SELECT * FROM reminderMessages WHERE reminder_time <= :currentTime")
+    fun getCurrentReminders(currentTime: String): List<ReminderMessage>
+
+    @Query("UPDATE reminderMessages SET message = :message, reminder_time = :reminder_time WHERE msgid = :id")
     fun updateReminder(id: Int, message: String, reminder_time: String)
 }
-
-/*
-@PrimaryKey(autoGenerate = true) var msgid: Int?,
-        @ColumnInfo(name = "message") var message: String,
-        @ColumnInfo(name = "location_x") var location_x: Double,
-        @ColumnInfo(name = "location_y") var location_y: Double,
-        @ColumnInfo(name = "reminder_time") var reminder_time: String,
-        @ColumnInfo(name = "creation_time") var creation_time: String,
-        @ColumnInfo(name = "creator_id") var creator_id: Int?,
-        @ColumnInfo(name = "reminder_seen") var reminder_seen: Boolean
- */

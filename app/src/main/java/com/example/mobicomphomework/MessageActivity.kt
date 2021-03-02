@@ -1,22 +1,42 @@
 package com.example.mobicomphomework
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.os.AsyncTask
-import android.os.Bundle
+import android.os.*
 import android.widget.AdapterView
 import android.widget.Button
 import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationCompat
 import androidx.room.Room
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.example.mobicomphomework.db.AppDatabase
 import com.example.mobicomphomework.db.ReminderMessage
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import java.text.SimpleDateFormat
+import java.util.*
+import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 class MessageActivity : AppCompatActivity() {
     private lateinit var listView: ListView
+    lateinit var updateHandler: Handler
+    private var showAll = false
+
+    private val updateRemindersTask = object : Runnable {
+        override  fun run() {
+            updateListView()
+            updateHandler.postDelayed(this, 15000)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_message)
@@ -39,6 +59,9 @@ class MessageActivity : AppCompatActivity() {
                         // pass the id of the message to edit to the edit activity
                         intent.putExtra("EDIT_REMINDER_ID", selectedReminder.msgid.toString())
 
+                        // pass the notification status
+                        intent.putExtra("NOTIFICATION_ENABLED", checkNotificationStatus(selectedReminder.msgid!!).toString())
+
                         // start the reminder edit activity
                         startActivity(intent)
 
@@ -57,6 +80,8 @@ class MessageActivity : AppCompatActivity() {
                                     .build()
                             db.messageDao().delete(selectedReminder.msgid!!)
                         }
+                        // cancel the pending notification
+                        cancelNotification(applicationContext, selectedReminder.msgid!!)
 
                         // update the list view
                         updateListView()
@@ -72,7 +97,35 @@ class MessageActivity : AppCompatActivity() {
             startActivity(Intent(applicationContext, NewReminderActivity::class.java))
         }
 
+        findViewById<Button>(R.id.btnShowAll).setOnClickListener {
+            showAll = !showAll
+
+            if (showAll) { findViewById<Button>(R.id.btnShowAll).text = "Show less" }
+            else { findViewById<Button>(R.id.btnShowAll).text = "Show all" }
+
+            updateListView()
+        }
+
+        // set updateListView to run every 15 s to check for new reminders
+        updateHandler = Handler(Looper.getMainLooper())
+        updateHandler.post(updateRemindersTask)
+
         updateListView()
+    }
+
+    private fun checkNotificationStatus(messageId: Int): Boolean {
+        // checks if notifications are currently enabled for a given message
+        val future = WorkManager.getInstance(applicationContext).getWorkInfosByTag(messageId.toString())
+        val scheduledWork = future.get()
+        if ( !((scheduledWork == null) || (scheduledWork.size == 0)) ) {
+            for (workInfo in scheduledWork) {
+                if (workInfo.state == WorkInfo.State.BLOCKED || workInfo.state == WorkInfo.State.ENQUEUED || workInfo.state == WorkInfo.State.RUNNING) {
+                    return true
+                }
+            }
+        }
+        // if no active work tagged with the message id was found, return false
+        return false
     }
 
     private fun logOut() {
@@ -86,9 +139,15 @@ class MessageActivity : AppCompatActivity() {
 
     }
 
+    override fun onPause() {
+        super.onPause()
+        updateHandler.removeCallbacks(updateRemindersTask)
+    }
+
     override fun onResume() {
         super.onResume()
         updateListView()
+        updateHandler.post(updateRemindersTask)
     }
 
     private fun updateListView() {
@@ -104,7 +163,15 @@ class MessageActivity : AppCompatActivity() {
                 getString(R.string.databaseFilename)
             ).build()
 
-            val reminderMessages = db.messageDao().getReminders()
+            val reminderMessages: List<ReminderMessage>
+            if (showAll) {
+                reminderMessages = db.messageDao().getAllReminders()
+            } else {
+                val currentCalendar = Calendar.getInstance()
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm")
+                val currentTime = dateFormat.format(currentCalendar.time)
+                reminderMessages = db.messageDao().getCurrentReminders(currentTime)
+            }
             db.close()
 
             return reminderMessages
@@ -123,5 +190,67 @@ class MessageActivity : AppCompatActivity() {
             }
         }
 
+    }
+    companion object {
+        fun showNotification(context: Context, message: String) {
+
+            val CHANNEL_ID = "MC_HW_NOTIFICATION_CHANNEL"
+            val notificationId = Random.nextInt(10, 1000) + 5
+
+            val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.alarm_24px)
+                    .setContentTitle(context.getString(R.string.app_name))
+                    .setContentText(message)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setGroup(CHANNEL_ID)
+
+            val notificationManager =
+                    context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                        CHANNEL_ID,
+                        context.getString(R.string.app_name),
+                        NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = context.getString(R.string.app_name)
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            notificationManager.notify(notificationId, notificationBuilder.build())
+
+        }
+
+        fun setNotification(
+                context: Context,
+                msgid: Int,
+                timeInMillis: Long,
+                message: String
+        ) {
+
+            val reminderParameters = Data.Builder()
+                    .putString("message", message)
+                    .putInt("msgid", msgid)
+                    .build()
+
+            // get the time from now until the reminder
+            var timeFromNow = 0L
+            if (timeInMillis > System.currentTimeMillis())
+                timeFromNow = timeInMillis - System.currentTimeMillis()
+
+            val notificationRequest = OneTimeWorkRequestBuilder<NotificationWorker>()
+                    .setInputData(reminderParameters)
+                    .setInitialDelay(timeFromNow, TimeUnit.MILLISECONDS)
+                    .addTag(msgid.toString())
+                    .build()
+
+            WorkManager.getInstance(context).enqueue(notificationRequest)
+        }
+
+        fun cancelNotification(context: Context, msgid: Int) {
+            WorkManager.getInstance(context).cancelAllWorkByTag(msgid.toString())
+        }
     }
 }

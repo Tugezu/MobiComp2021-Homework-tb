@@ -7,6 +7,8 @@ import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.TextView
 import com.example.mobicomphomework.db.ReminderMessage
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MessageAdapter(context: Context, private val dataSource: List<ReminderMessage>) : BaseAdapter() {
 
@@ -16,11 +18,17 @@ class MessageAdapter(context: Context, private val dataSource: List<ReminderMess
     override fun getView(position: Int, convertView: View?, container: ViewGroup?): View? {
         val rowView = inflater.inflate(R.layout.activity_message_item, container, false)
 
+        val databaseTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm")
+        val displayTimeFormat = SimpleDateFormat("HH:mm dd.MM.yyyy")
+
+        val reminderCalendar = Calendar.getInstance()
+        reminderCalendar.time = databaseTimeFormat.parse(dataSource[position].reminder_time)!!
+
         val eventNameTextView = rowView.findViewById<TextView>(R.id.txtEventName) as TextView
         val eventTimeTextView = rowView.findViewById<TextView>(R.id.txtEventTime) as TextView
 
         eventNameTextView.text = dataSource[position].message
-        eventTimeTextView.text = dataSource[position].reminder_time
+        eventTimeTextView.text = displayTimeFormat.format(reminderCalendar.time)
 
         return rowView
     }
