@@ -40,10 +40,6 @@ class EditReminderActivity : AppCompatActivity(), DatePickerDialog.OnDateSetList
 
         val editTextDate = findViewById<TextView>(R.id.editTextDate)
         val editTextTime = findViewById<TextView>(R.id.editTextTime)
-        editTextDate.inputType = InputType.TYPE_NULL
-        editTextDate.isClickable = true
-        editTextTime.inputType = InputType.TYPE_NULL
-        editTextTime.isClickable = true
 
         editTextDate.setOnClickListener {
             DatePickerDialog(

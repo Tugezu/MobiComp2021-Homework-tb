@@ -1,9 +1,12 @@
 package com.example.mobicomphomework
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.*
 import android.widget.AdapterView
 import android.widget.Button
@@ -11,7 +14,9 @@ import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.room.Room
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
@@ -19,6 +24,11 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.example.mobicomphomework.db.AppDatabase
 import com.example.mobicomphomework.db.ReminderMessage
+import com.google.android.gms.location.Geofence
+import com.google.android.gms.location.GeofencingClient
+import com.google.android.gms.location.GeofencingRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.maps.model.LatLng
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import java.text.SimpleDateFormat
 import java.util.*
@@ -79,6 +89,7 @@ class MessageActivity : AppCompatActivity() {
                                     )
                                     .build()
                             db.messageDao().delete(selectedReminder.msgid!!)
+                            db.close()
                         }
                         // cancel the pending notification
                         cancelNotification(applicationContext, selectedReminder.msgid!!)
@@ -106,6 +117,10 @@ class MessageActivity : AppCompatActivity() {
             updateListView()
         }
 
+        findViewById<Button>(R.id.btnShowMap).setOnClickListener {
+            startActivity(Intent(applicationContext, MapsActivity::class.java))
+        }
+
         // set updateListView to run every 15 s to check for new reminders
         updateHandler = Handler(Looper.getMainLooper())
         updateHandler.post(updateRemindersTask)
@@ -115,11 +130,14 @@ class MessageActivity : AppCompatActivity() {
 
     private fun checkNotificationStatus(messageId: Int): Boolean {
         // checks if notifications are currently enabled for a given message
-        val future = WorkManager.getInstance(applicationContext).getWorkInfosByTag(messageId.toString())
+        val future = WorkManager.getInstance(applicationContext)
+            .getWorkInfosByTag(messageId.toString())
         val scheduledWork = future.get()
+
         if ( !((scheduledWork == null) || (scheduledWork.size == 0)) ) {
             for (workInfo in scheduledWork) {
-                if (workInfo.state == WorkInfo.State.BLOCKED || workInfo.state == WorkInfo.State.ENQUEUED || workInfo.state == WorkInfo.State.RUNNING) {
+                if (workInfo.state == WorkInfo.State.BLOCKED || workInfo.state ==
+                    WorkInfo.State.ENQUEUED || workInfo.state == WorkInfo.State.RUNNING) {
                     return true
                 }
             }
@@ -189,7 +207,6 @@ class MessageActivity : AppCompatActivity() {
                 }
             }
         }
-
     }
     companion object {
         fun showNotification(context: Context, message: String) {

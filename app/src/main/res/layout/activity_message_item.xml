@@ -30,6 +30,19 @@
         android:layout_height="wrap_content"
         android:text="hh:mm dd.mm.yy" />
 
+    <TextView
+        android:id="@+id/textView6"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Location"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/txtEventLocation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Lat: 65 Long: 65" />
+
     <View
         android:id="@+id/view"
         android:layout_width="match_parent"

@@ -2,11 +2,13 @@ package com.example.mobicomphomework
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.Intent
 import android.os.AsyncTask
 import android.os.Bundle
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.room.Room
+import com.example.mobicomphomework.Constants.UNDEFINED_COORDINATE
 import com.example.mobicomphomework.db.AppDatabase
 import com.example.mobicomphomework.db.ReminderMessage
 import java.text.SimpleDateFormat
@@ -19,6 +21,7 @@ class NewReminderActivity : AppCompatActivity(), DatePickerDialog.OnDateSetListe
     private val dateFormat = SimpleDateFormat("dd.MM.yyyy")
     private val timeFormat = SimpleDateFormat("HH:mm")
     private val choiceCalendar = GregorianCalendar.getInstance()
+    private var coordinates = doubleArrayOf(UNDEFINED_COORDINATE, UNDEFINED_COORDINATE)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,6 +53,11 @@ class NewReminderActivity : AppCompatActivity(), DatePickerDialog.OnDateSetListe
         findViewById<TextView>(R.id.editTextTime).text = timeFormat.format(choiceCalendar.time)
         findViewById<TextView>(R.id.editTextDate).text = dateFormat.format(choiceCalendar.time)
 
+        findViewById<TextView>(R.id.editTextLocation).setOnClickListener {
+            startActivityForResult(Intent(applicationContext, ChooseLocationActivity::class.java),
+                    0)
+        }
+
         findViewById<Button>(R.id.btnCreateReminder).setOnClickListener {
             saveReminder()
         }
@@ -74,8 +82,8 @@ class NewReminderActivity : AppCompatActivity(), DatePickerDialog.OnDateSetListe
         val reminderMessage = ReminderMessage(
                 null,
                 message = findViewById<TextView>(R.id.editTextMessage).text.toString(),
-                location_x = 0.0,
-                location_y = 0.0,
+                location_x = coordinates[1],
+                location_y = coordinates[0],
                 reminder_time = databaseTimeFormat.format(reminderCalendar.time),
                 creation_time = databaseTimeFormat.format(currentTime.time),
                 0,false
@@ -104,10 +112,24 @@ class NewReminderActivity : AppCompatActivity(), DatePickerDialog.OnDateSetListe
                 }
             }
 
+            // TODO: CHECK IF LOCATION IS EMPTY - ALLOW EITHER TIME OR LOCATION TO BE OMITTED
+
             // end the reminder creation activity after adding the reminder
             finish()
         }
 
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, intent: Intent?) {
+        if (requestCode == 0) {
+            if (resultCode == RESULT_OK) {
+                coordinates = intent!!.getDoubleArrayExtra("latLng")!!
+                findViewById<TextView>(R.id.editTextLocation).text =
+                        "Lat: %.${3}f Long: %.${3}f".format(coordinates.get(0), coordinates.get(1))
+            }
+        } else {
+            super.onActivityResult(requestCode, resultCode, intent)
+        }
     }
 
     override fun onDateSet(view: DatePicker?, year: Int, month: Int, dayOfMonth: Int) {

@@ -24,11 +24,14 @@ class MessageAdapter(context: Context, private val dataSource: List<ReminderMess
         val reminderCalendar = Calendar.getInstance()
         reminderCalendar.time = databaseTimeFormat.parse(dataSource[position].reminder_time)!!
 
-        val eventNameTextView = rowView.findViewById<TextView>(R.id.txtEventName) as TextView
-        val eventTimeTextView = rowView.findViewById<TextView>(R.id.txtEventTime) as TextView
+        val eventNameTextView = rowView.findViewById(R.id.txtEventName) as TextView
+        val eventTimeTextView = rowView.findViewById(R.id.txtEventTime) as TextView
+        val eventLocationTextView = rowView.findViewById(R.id.txtEventLocation) as TextView
 
         eventNameTextView.text = dataSource[position].message
         eventTimeTextView.text = displayTimeFormat.format(reminderCalendar.time)
+        eventLocationTextView.text = "Lat: %.${3}f Long: %.${3}f".format(
+            dataSource[position].location_y, dataSource[position].location_x)
 
         return rowView
     }
