@@ -14,5 +14,8 @@ data class ReminderMessage(
         @ColumnInfo(name = "reminder_time") var reminder_time: String,
         @ColumnInfo(name = "creation_time") var creation_time: String,
         @ColumnInfo(name = "creator_id") var creator_id: Int?,
+
+        // Note: reminder_seen is only used for reminders with location enabled (always false otherwise).
+        // All other reminders are considered seen if their reminder_time is in the past.
         @ColumnInfo(name = "reminder_seen") var reminder_seen: Boolean
 )

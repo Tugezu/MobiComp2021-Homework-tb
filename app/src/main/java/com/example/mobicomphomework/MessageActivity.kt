@@ -1,12 +1,9 @@
 package com.example.mobicomphomework
 
-import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.*
 import android.widget.AdapterView
 import android.widget.Button
@@ -14,9 +11,7 @@ import android.widget.ListView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import androidx.room.Room
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
@@ -24,11 +19,6 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.example.mobicomphomework.db.AppDatabase
 import com.example.mobicomphomework.db.ReminderMessage
-import com.google.android.gms.location.Geofence
-import com.google.android.gms.location.GeofencingClient
-import com.google.android.gms.location.GeofencingRequest
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.maps.model.LatLng
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import java.text.SimpleDateFormat
 import java.util.*
@@ -51,7 +41,7 @@ class MessageActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_message)
 
-        listView = findViewById<ListView>(R.id.reminderMsgListView)
+        listView = findViewById(R.id.reminderMsgListView)
 
         listView.onItemClickListener = AdapterView.OnItemClickListener { _, _, position, _ ->
 
@@ -67,10 +57,15 @@ class MessageActivity : AppCompatActivity() {
                         intent = Intent(applicationContext, EditReminderActivity::class.java)
 
                         // pass the id of the message to edit to the edit activity
-                        intent.putExtra("EDIT_REMINDER_ID", selectedReminder.msgid.toString())
+                        intent.putExtra("EDIT_REMINDER_ID",
+                                selectedReminder.msgid.toString())
 
                         // pass the notification status
-                        intent.putExtra("NOTIFICATION_ENABLED", checkNotificationStatus(selectedReminder.msgid!!).toString())
+                        intent.putExtra("NOTIFICATION_ENABLED", checkNotificationStatus(
+                                selectedReminder.msgid!!,
+                                selectedReminder.location_y !=
+                                        Constants.UNDEFINED_COORDINATE,
+                                selectedReminder.reminder_seen).toString())
 
                         // start the reminder edit activity
                         startActivity(intent)
@@ -128,8 +123,17 @@ class MessageActivity : AppCompatActivity() {
         updateListView()
     }
 
-    private fun checkNotificationStatus(messageId: Int): Boolean {
+    private fun checkNotificationStatus(messageId: Int,
+                                        locationEnabled: Boolean,
+                                        reminderSeen: Boolean): Boolean {
         // checks if notifications are currently enabled for a given message
+
+        // if location is enabled
+        if (locationEnabled) {
+            return !reminderSeen
+        }
+
+        // if location is disabled, check for scheduled notifications
         val future = WorkManager.getInstance(applicationContext)
             .getWorkInfosByTag(messageId.toString())
         val scheduledWork = future.get()
@@ -188,7 +192,7 @@ class MessageActivity : AppCompatActivity() {
                 val currentCalendar = Calendar.getInstance()
                 val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm")
                 val currentTime = dateFormat.format(currentCalendar.time)
-                reminderMessages = db.messageDao().getCurrentReminders(currentTime)
+                reminderMessages = db.messageDao().getReminderHistory(currentTime)
             }
             db.close()
 

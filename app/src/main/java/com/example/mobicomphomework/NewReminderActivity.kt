@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.room.Room
+import com.example.mobicomphomework.Constants.CHOOSE_LOCATION_REQUEST_CODE
 import com.example.mobicomphomework.Constants.UNDEFINED_COORDINATE
 import com.example.mobicomphomework.db.AppDatabase
 import com.example.mobicomphomework.db.ReminderMessage
@@ -50,12 +51,11 @@ class NewReminderActivity : AppCompatActivity(), DatePickerDialog.OnDateSetListe
             ).show()
         }
 
-        findViewById<TextView>(R.id.editTextTime).text = timeFormat.format(choiceCalendar.time)
-        findViewById<TextView>(R.id.editTextDate).text = dateFormat.format(choiceCalendar.time)
-
         findViewById<TextView>(R.id.editTextLocation).setOnClickListener {
-            startActivityForResult(Intent(applicationContext, ChooseLocationActivity::class.java),
-                    0)
+            val intent = Intent(applicationContext, ChooseLocationActivity::class.java).apply {
+                putExtra("previousLatLng", coordinates)
+            }
+            startActivityForResult(intent, CHOOSE_LOCATION_REQUEST_CODE)
         }
 
         findViewById<Button>(R.id.btnCreateReminder).setOnClickListener {
@@ -65,27 +65,34 @@ class NewReminderActivity : AppCompatActivity(), DatePickerDialog.OnDateSetListe
 
     private fun saveReminder() {
 
-        // get current time
-        val currentTime = Calendar.getInstance()
+        val message = findViewById<TextView>(R.id.editTextMessage).text.toString()
+        if (message.isEmpty()) {
+            Toast.makeText(applicationContext, "Please enter a message",
+                    Toast.LENGTH_SHORT).show()
+            return
+        }
 
-        // retrieve the date to be saved
-        val reminderCalendar = GregorianCalendar.getInstance()
-        val dateParts = findViewById<TextView>(R.id.editTextDate).text.split(".").toTypedArray()
-        val timeParts = findViewById<TextView>(R.id.editTextTime).text.split(":").toTypedArray()
+        // if the set time is not in the future, consider time to be disabled
+        if (choiceCalendar.timeInMillis <= Calendar.getInstance().timeInMillis) {
+            if (coordinates[0] == UNDEFINED_COORDINATE) {
 
-        reminderCalendar.set(Calendar.YEAR, dateParts[2].toInt())
-        reminderCalendar.set(Calendar.MONTH, dateParts[1].toInt()-1)
-        reminderCalendar.set(Calendar.DAY_OF_MONTH, dateParts[0].toInt())
-        reminderCalendar.set(Calendar.HOUR_OF_DAY, timeParts[0].toInt())
-        reminderCalendar.set(Calendar.MINUTE, timeParts[1].toInt())
+                // either a time or location has to be defined
+                Toast.makeText(applicationContext, "Please define a time or location",
+                        Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            // denote a disabled time with Jan 1st, 1970 0:00 UTC
+            choiceCalendar.timeInMillis = 0
+        }
 
         val reminderMessage = ReminderMessage(
                 null,
-                message = findViewById<TextView>(R.id.editTextMessage).text.toString(),
+                message = message,
                 location_x = coordinates[1],
                 location_y = coordinates[0],
-                reminder_time = databaseTimeFormat.format(reminderCalendar.time),
-                creation_time = databaseTimeFormat.format(currentTime.time),
+                reminder_time = databaseTimeFormat.format(choiceCalendar.time),
+                creation_time = databaseTimeFormat.format(Calendar.getInstance().time),
                 0,false
         )
 
@@ -97,22 +104,30 @@ class NewReminderActivity : AppCompatActivity(), DatePickerDialog.OnDateSetListe
                 getString(R.string.databaseFilename)
             ).build()
             val msgid = db.messageDao().insert(reminderMessage).toInt()
-            db.close()
 
             // schedule a notification if the "Show notification" box is checked
-            // and the time of the reminder is in the future
             if (findViewById<CheckBox>(R.id.checkBoxNotification).isChecked) {
-                if (reminderCalendar.timeInMillis > Calendar.getInstance().timeInMillis) {
+                if (coordinates[0] == UNDEFINED_COORDINATE) {
 
-                    MessageActivity.setNotification(
-                            applicationContext,
-                            msgid,
-                            reminderCalendar.timeInMillis,
-                            reminderMessage.message)
+                    // schedule a notification at the specified time if location is disabled
+                    // and the time of the reminder is in the future
+                    if (choiceCalendar.timeInMillis > Calendar.getInstance().timeInMillis) {
+
+                        MessageActivity.setNotification(
+                                applicationContext,
+                                msgid,
+                                choiceCalendar.timeInMillis,
+                                reminderMessage.message)
+                    }
+                }
+            } else {
+                if (coordinates[0] != UNDEFINED_COORDINATE) {
+                    // if a location is set, but notifications are disabled,
+                    // tell the application not to show a location based notification
+                    db.messageDao().setReminderSeen(msgid)
                 }
             }
-
-            // TODO: CHECK IF LOCATION IS EMPTY - ALLOW EITHER TIME OR LOCATION TO BE OMITTED
+            db.close()
 
             // end the reminder creation activity after adding the reminder
             finish()
@@ -121,11 +136,14 @@ class NewReminderActivity : AppCompatActivity(), DatePickerDialog.OnDateSetListe
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, intent: Intent?) {
-        if (requestCode == 0) {
+        if (requestCode == CHOOSE_LOCATION_REQUEST_CODE) {
             if (resultCode == RESULT_OK) {
                 coordinates = intent!!.getDoubleArrayExtra("latLng")!!
-                findViewById<TextView>(R.id.editTextLocation).text =
-                        "Lat: %.${3}f Long: %.${3}f".format(coordinates.get(0), coordinates.get(1))
+
+                if (coordinates[0] != UNDEFINED_COORDINATE) {
+                    findViewById<TextView>(R.id.editTextLocation).text =
+                            "Lat: %.${3}f Long: %.${3}f".format(coordinates[0], coordinates[1])
+                }
             }
         } else {
             super.onActivityResult(requestCode, resultCode, intent)

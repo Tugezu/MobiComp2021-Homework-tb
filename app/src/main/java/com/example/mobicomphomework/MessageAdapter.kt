@@ -29,10 +29,19 @@ class MessageAdapter(context: Context, private val dataSource: List<ReminderMess
         val eventLocationTextView = rowView.findViewById(R.id.txtEventLocation) as TextView
 
         eventNameTextView.text = dataSource[position].message
-        eventTimeTextView.text = displayTimeFormat.format(reminderCalendar.time)
-        eventLocationTextView.text = "Lat: %.${3}f Long: %.${3}f".format(
-            dataSource[position].location_y, dataSource[position].location_x)
-
+        
+        if (reminderCalendar.timeInMillis > 0) {
+            eventTimeTextView.text = displayTimeFormat.format(reminderCalendar.time)
+        } else {
+            eventTimeTextView.text = "disabled"
+        }
+        
+        if (dataSource[position].location_x == Constants.UNDEFINED_COORDINATE) {
+            eventLocationTextView.text = "disabled"
+        } else {
+            eventLocationTextView.text = "Lat: %.${3}f Long: %.${3}f".format(
+                    dataSource[position].location_y, dataSource[position].location_x)
+        }
         return rowView
     }
 

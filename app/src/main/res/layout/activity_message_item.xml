@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical">
@@ -15,7 +16,7 @@
         android:id="@+id/txtEventName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="eventname" />
+        tools:text="eventname" />
 
     <TextView
         android:id="@+id/textView5"
@@ -28,7 +29,7 @@
         android:id="@+id/txtEventTime"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="hh:mm dd.mm.yy" />
+        tools:text="hh:mm dd.mm.yy" />
 
     <TextView
         android:id="@+id/textView6"
@@ -41,7 +42,7 @@
         android:id="@+id/txtEventLocation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Lat: 65 Long: 65" />
+        tools:text="Lat: 65 Long: 65" />
 
     <View
         android:id="@+id/view"

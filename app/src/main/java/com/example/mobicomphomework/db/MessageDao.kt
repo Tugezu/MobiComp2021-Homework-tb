@@ -20,9 +20,15 @@ interface MessageDao {
     @Query("SELECT * FROM reminderMessages WHERE msgid = :id")
     fun getReminder(id: Int): ReminderMessage
 
-    @Query("SELECT * FROM reminderMessages WHERE reminder_time <= :currentTime")
-    fun getCurrentReminders(currentTime: String): List<ReminderMessage>
+    @Query("SELECT * FROM reminderMessages WHERE (reminder_time <= :currentTime AND location_y < -90) OR reminder_seen = 1")
+    fun getReminderHistory(currentTime: String): List<ReminderMessage>
 
-    @Query("UPDATE reminderMessages SET message = :message, reminder_time = :reminder_time WHERE msgid = :id")
-    fun updateReminder(id: Int, message: String, reminder_time: String)
+    @Query("SELECT * FROM reminderMessages WHERE reminder_seen = 0 AND location_y >= -90")
+    fun getUnseenLocationEnabledReminders(): List<ReminderMessage>
+
+    @Query("UPDATE reminderMessages SET reminder_seen = 1 WHERE msgid = :id")
+    fun setReminderSeen(id: Int)
+
+    @Query("UPDATE reminderMessages SET message = :message, location_x = :location_x, location_y = :location_y, reminder_time = :reminder_time, reminder_seen = :reminder_seen WHERE msgid = :id")
+    fun updateReminder(id: Int, message: String, location_x: Double, location_y: Double, reminder_time: String, reminder_seen: Boolean)
 }

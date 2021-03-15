@@ -2,9 +2,6 @@ package com.example.mobicomphomework
 
 import android.Manifest
 import android.app.Activity
-import android.app.AlertDialog
-import android.content.Context
-import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -18,9 +15,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.mobicomphomework.Constants.BACKGROUND_LOCATION_REQUEST_CODE
 import com.example.mobicomphomework.Constants.CAMERA_ZOOM_LEVEL
+import com.example.mobicomphomework.Constants.GEOFENCE_RADIUS
 import com.example.mobicomphomework.Constants.LOCATION_REQUEST_CODE
+import com.example.mobicomphomework.Constants.UNDEFINED_COORDINATE
 import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
@@ -37,6 +35,7 @@ class ChooseLocationActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var mMap: GoogleMap
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var chosenLocation: LatLng
+    private lateinit var previousCoordinates: DoubleArray
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +46,14 @@ class ChooseLocationActivity : AppCompatActivity(), OnMapReadyCallback {
         mapFragment.getMapAsync(this)
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        // get the previously chosen location from the intent
+        previousCoordinates = getIntent().getDoubleArrayExtra("previousLatLng")!!
+
+        // initialize the chosen location to the previously chosen one
+        if (previousCoordinates[0] != UNDEFINED_COORDINATE) {
+            chosenLocation = LatLng(previousCoordinates[0], previousCoordinates[1])
+        }
     }
 
 
@@ -78,26 +85,46 @@ class ChooseLocationActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
 
-        // TODO: initialize to current ("virtual") location
-        // Zoom to last known location
-        fusedLocationClient.lastLocation.addOnSuccessListener {
-            if (it != null) {
-                with(mMap) {
-                    val latLng = LatLng(it.latitude, it.longitude)
-                    moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, CAMERA_ZOOM_LEVEL))
-                }
-            } else {
-                with(mMap) {
-                    moveCamera(
-                            CameraUpdateFactory.newLatLngZoom(
-                                    LatLng(65.01355297927051, 25.464019811372978),
-                                    CAMERA_ZOOM_LEVEL
-                            )
-                    )
+        if (previousCoordinates[0] == UNDEFINED_COORDINATE) {
+            // zoom to last known location
+            fusedLocationClient.lastLocation.addOnSuccessListener {
+                if (it != null) {
+                    with(mMap) {
+                        val latLng = LatLng(it.latitude, it.longitude)
+                        moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, CAMERA_ZOOM_LEVEL))
+                    }
                 }
             }
-        }
+        } else {
+            // zoom into the previously chosen location and display a marker
+            with(mMap) {
+                val previousLatLng = LatLng(previousCoordinates[0], previousCoordinates[1])
 
+                val snippet = String.format(
+                        Locale.getDefault(),
+                        "Lat: %1$.5f, Long: %2$.5f",
+                        previousLatLng.latitude,
+                        previousLatLng.longitude
+                )
+
+                moveCamera(CameraUpdateFactory.newLatLngZoom(
+                        previousLatLng, CAMERA_ZOOM_LEVEL)
+                )
+                addMarker(
+                        MarkerOptions()
+                                .position(previousLatLng)
+                                .title("Chosen location")
+                                .snippet(snippet)
+                ).showInfoWindow()
+                addCircle(
+                        CircleOptions()
+                                .center(previousLatLng)
+                                .strokeColor(Color.argb(50, 60, 60, 60))
+                                .fillColor(Color.argb(70, 160, 160, 160))
+                                .radius(GEOFENCE_RADIUS.toDouble())
+                )
+            }
+        }
         setMapCLickListener(mMap)
     }
 
@@ -138,7 +165,7 @@ class ChooseLocationActivity : AppCompatActivity(), OnMapReadyCallback {
                             .center(it)
                             .strokeColor(Color.argb(50, 70, 70, 70))
                             .fillColor(Color.argb(70, 150, 150, 150))
-                            .radius(200.0)
+                            .radius(GEOFENCE_RADIUS.toDouble())
             )
 
             // update chosen location

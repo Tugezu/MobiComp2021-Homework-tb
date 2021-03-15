@@ -1,8 +1,6 @@
 package com.example.mobicomphomework
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -10,33 +8,35 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.AsyncTask
 import android.os.Build
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.room.Room
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.mobicomphomework.Constants.CAMERA_ZOOM_LEVEL
 import com.example.mobicomphomework.Constants.GEOFENCE_DWELL_DELAY
 import com.example.mobicomphomework.Constants.GEOFENCE_EXPIRATION
-import com.example.mobicomphomework.Constants.GEOFENCE_ID
 import com.example.mobicomphomework.Constants.GEOFENCE_LOCATION_REQUEST_CODE
 import com.example.mobicomphomework.Constants.GEOFENCE_RADIUS
 import com.example.mobicomphomework.Constants.LOCATION_REQUEST_CODE
 import com.example.mobicomphomework.db.AppDatabase
 import com.example.mobicomphomework.db.ReminderMessage
 import com.google.android.gms.location.*
-import com.google.android.gms.maps.*
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.OnMapReadyCallback
+import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.CircleOptions
-
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.random.Random
+import java.util.concurrent.TimeUnit
 
-private val TAG: String = MapsActivity::class.java.simpleName
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
@@ -77,36 +77,32 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             this.map.isMyLocationEnabled = true
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(applicationContext,
-                            Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                    ) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                        arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
-                        Constants.BACKGROUND_LOCATION_REQUEST_CODE)
-            }
-        }
-
-        // Zoom to last known location
+        // zoom to last known location
         fusedLocationClient.lastLocation.addOnSuccessListener {
             if (it != null) {
                 with(map) {
                     val latLng = LatLng(it.latitude, it.longitude)
                     moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, CAMERA_ZOOM_LEVEL))
                 }
-            } else {
-                with(map) {
-                    moveCamera(
-                            CameraUpdateFactory.newLatLngZoom(
-                                    LatLng(65.0, 25.0),
-                                    CAMERA_ZOOM_LEVEL
-                            )
-                    )
-                }
             }
         }
 
-        generateGeofences()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(
+                            applicationContext, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                    ) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+                        GEOFENCE_LOCATION_REQUEST_CODE
+                )
+            } else {
+                generateGeofences()
+            }
+        } else {
+            generateGeofences()
+        }
+
     }
 
     private fun generateGeofences() {
@@ -121,7 +117,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 getString(R.string.databaseFilename)
             ).build()
 
-            val reminderMessages = db.messageDao().getAllReminders()
+            val reminderMessages = db.messageDao().getUnseenLocationEnabledReminders()
             db.close()
 
             return reminderMessages
@@ -143,56 +139,47 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                         map.addCircle(
                             CircleOptions()
                                 .center(location)
-                                .strokeColor(Color.argb(50, 70, 70, 70))
-                                .fillColor(Color.argb(70, 150, 150, 150))
-                                .radius(200.0)
+                                .strokeColor(Color.argb(50, 50, 50, 100))
+                                .fillColor(Color.argb(70, 120, 120, 200))
+                                .radius(GEOFENCE_RADIUS.toDouble())
                         )
 
-                        createGeoFence(location, reminderMessage.message, geofencingClient)
+                        val databaseTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm")
+                        val reminderCalendar = Calendar.getInstance()
+                        reminderCalendar.time = databaseTimeFormat.parse(reminderMessage.reminder_time)!!
+
+                        if (reminderCalendar.timeInMillis > Calendar.getInstance().timeInMillis) {
+
+                            // If the time of the location enabled reminder is in the future,
+                            // the Geofence has to be created at the time of the reminder.
+                            // Otherwise the Geofence will not trigger if the user happens to be
+                            // inside the Geofence at the time of the reminder.
+
+                            val geofenceParameters = Data.Builder()
+                                    .putInt("msgid", reminderMessage.msgid!!)
+                                    .putDoubleArray("latLng",
+                                            doubleArrayOf(reminderMessage.location_y,
+                                                          reminderMessage.location_x))
+                                    .build()
+
+                            // get the time from now until the reminder time
+                            val timeFromNow = reminderCalendar.timeInMillis - System.currentTimeMillis()
+
+                            // schedule the Geofence to be created at the time of the reminder
+                            val geofenceWorkRequest = OneTimeWorkRequestBuilder<DelayedGeofenceCreationWorker>()
+                                    .setInputData(geofenceParameters)
+                                    .setInitialDelay(timeFromNow, TimeUnit.MILLISECONDS)
+                                    .addTag(reminderMessage.msgid.toString())
+                                    .build()
+
+                            WorkManager.getInstance(applicationContext).enqueue(geofenceWorkRequest)
+                        } else {
+                            WorkManager.getInstance(applicationContext).cancelAllWorkByTag(reminderMessage.msgid.toString())
+                            createGeofence(applicationContext, location, reminderMessage.msgid!!)
+                        }
                     }
                 }
             }
-        }
-    }
-
-    private fun createGeoFence(location: LatLng, message: String, geofencingClient: GeofencingClient) {
-        val geofence = Geofence.Builder()
-            .setRequestId(GEOFENCE_ID)
-            .setCircularRegion(location.latitude, location.longitude, GEOFENCE_RADIUS.toFloat())
-            .setExpirationDuration(GEOFENCE_EXPIRATION.toLong())
-            .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_DWELL)
-            .setLoiteringDelay(GEOFENCE_DWELL_DELAY)
-            .build()
-
-        val geofenceRequest = GeofencingRequest.Builder()
-            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
-            .addGeofence(geofence)
-            .build()
-
-
-        val intent = Intent(this, GeofenceReceiver::class.java)
-            .putExtra("message", message)
-
-        val pendingIntent = PendingIntent.getBroadcast(
-            applicationContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(
-                    applicationContext, Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                ) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
-                    GEOFENCE_LOCATION_REQUEST_CODE
-                )
-            } else {
-                geofencingClient.addGeofences(geofenceRequest, pendingIntent)
-                println("INFO: Geofence created")
-            }
-        } else {
-            geofencingClient.addGeofences(geofenceRequest, pendingIntent)
-            println("INFO: Geofence created")
         }
     }
 
@@ -201,15 +188,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
-        if (requestCode == GEOFENCE_LOCATION_REQUEST_CODE) {
-            if (permissions.isNotEmpty() && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(
-                    this,
-                    "This application needs background location to work on Android 10 and higher",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-        }
         if (requestCode == LOCATION_REQUEST_CODE) {
             if (
                 grantResults.isNotEmpty() && (
@@ -231,60 +209,68 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             } else {
                 Toast.makeText(
                     this,
-                    "The app needs location permission to function",
+                    "Location permissions must be granted to enable location based reminders",
                     Toast.LENGTH_LONG
                 ).show()
             }
+        }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                if (grantResults.isNotEmpty() && grantResults[2] != PackageManager.PERMISSION_GRANTED) {
-                    Toast.makeText(
-                        this,
-                        "This application needs background location to work on Android 10 and higher",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+        if (requestCode == GEOFENCE_LOCATION_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(
+                    this,
+                    "Please enable background location to use location based reminders on" +
+                            "Android 10 and higher",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
 
+
     companion object {
+        fun createGeofence(context: Context, location: LatLng, messageId: Int) {
+            val geofence = Geofence.Builder()
+                    .setRequestId(messageId.toString())
+                    .setCircularRegion(location.latitude, location.longitude, GEOFENCE_RADIUS.toFloat())
+                    .setExpirationDuration(GEOFENCE_EXPIRATION.toLong())
+                    .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_DWELL)
+                    .setLoiteringDelay(GEOFENCE_DWELL_DELAY)
+                    .build()
+
+            val geofenceRequest = GeofencingRequest.Builder()
+                    .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+                    .addGeofence(geofence)
+                    .build()
+
+            val pendingIntent: PendingIntent by lazy {
+                val intent = Intent(context, GeofenceReceiver::class.java)
+                        .putExtra("msgid", messageId.toString())
+
+                PendingIntent.getBroadcast(context, messageId, intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT)
+            }
+
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (ContextCompat.checkSelfPermission(context.applicationContext,
+                                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED) {
+                    LocationServices.getGeofencingClient(context).addGeofences(geofenceRequest, pendingIntent)
+                    println("INFO: Geofence created")
+                }
+            } else {
+                LocationServices.getGeofencingClient(context).addGeofences(geofenceRequest, pendingIntent)
+                println("INFO: Geofence created")
+            }
+        }
+
         fun removeGeofences(context: Context, triggeringGeofenceList: MutableList<Geofence>) {
             val geofenceIdList = mutableListOf<String>()
             for (entry in triggeringGeofenceList) {
                 geofenceIdList.add(entry.requestId)
             }
             LocationServices.getGeofencingClient(context).removeGeofences(geofenceIdList)
-        }
-
-        fun showNotification(context: Context?, message: String) {
-            val CHANNEL_ID = "REMINDER_NOTIFICATION_CHANNEL"
-            var notificationId = 1589
-            notificationId += Random(notificationId).nextInt(1, 30)
-
-            val notificationBuilder = NotificationCompat.Builder(context!!.applicationContext, CHANNEL_ID)
-                .setSmallIcon(R.drawable.alarm_24px)
-                .setContentTitle(context.getString(R.string.app_name))
-                .setContentText(message)
-                .setStyle(
-                    NotificationCompat.BigTextStyle()
-                        .bigText(message)
-                )
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel = NotificationChannel(
-                    CHANNEL_ID,
-                    context.getString(R.string.app_name),
-                    NotificationManager.IMPORTANCE_DEFAULT
-                ).apply {
-                    description = context.getString(R.string.app_name)
-                }
-                notificationManager.createNotificationChannel(channel)
-            }
-            notificationManager.notify(notificationId, notificationBuilder.build())
         }
     }
     
